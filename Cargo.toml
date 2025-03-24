@@ -1,0 +1,38 @@
+[package]
+name = "prompt-wrapper"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Web framework
+axum = "0.7.2"
+tokio = { version = "1.33.0", features = ["full"] }
+tower-http = { version = "0.5.0", features = ["cors", "trace"] }
+
+# Serialization/Deserialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# HTTP client
+reqwest = { version = "0.11", features = ["json"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Environment variables
+dotenv = "0.15"
+config = "0.13"
+
+# Rate limiting and caching
+redis = { version = "0.23", features = ["tokio-comp"] }
+
+# Database
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite"] }
+
+# Utilities
+chrono = { version = "0.4", features = ["serde"] }
+rand = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1.4", features = ["v4", "serde"] }

@@ -1,0 +1,30 @@
+/target
+.env
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# Rust specific
+**/*.rs.bk
+Cargo.lock
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment files
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Log files
+*.log
+
+.cursor/
+.cursorrules
