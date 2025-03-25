@@ -7,6 +7,7 @@ pub struct Config {
     pub openrouter: OpenRouterConfig,
     pub rate_limit: RateLimitConfig,
     pub storage: StorageConfig,
+    pub presets: PresetsConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,6 +36,11 @@ pub struct StorageConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PresetsConfig {
+    pub file_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StorageType {
     #[serde(rename = "sqlite")]
     SQLite,
@@ -42,7 +48,16 @@ pub enum StorageType {
     Redis,
     #[serde(rename = "memory")]
     Memory,
+    #[serde(rename = "sled")]
+    Sled,
 }
+
+// Test user ID - only valid in debug builds
+#[cfg(debug_assertions)]
+pub const TEST_USER_ID: &str = "test_user";
+
+#[cfg(not(debug_assertions))]
+pub const TEST_USER_ID: &str = "invalid_test_user";
 
 impl Config {
     pub fn from_env() -> Self {
@@ -73,9 +88,13 @@ impl Config {
                 type_: match env::var("STORAGE_TYPE").unwrap_or_else(|_| "memory".to_string()).as_str() {
                     "sqlite" => StorageType::SQLite,
                     "redis" => StorageType::Redis,
+                    "sled" => StorageType::Sled,
                     _ => StorageType::Memory,
                 },
                 connection_string: env::var("STORAGE_CONNECTION_STRING").unwrap_or_else(|_| "memory".to_string()),
+            },
+            presets: PresetsConfig {
+                file_path: env::var("PRESETS_FILE_PATH").unwrap_or_else(|_| "./presets.yaml".to_string()),
             },
         }
     }

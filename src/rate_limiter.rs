@@ -66,6 +66,21 @@ impl RateLimiter {
         Ok(true)
     }
     
+    pub async fn reset(&self, user_id: &str) -> Result<()> {
+        let mut store = self.store.lock().unwrap();
+        let now = Utc::now();
+        
+        // Set up the user with a fresh rate limit
+        let new_info = RateLimitInfo {
+            user_id: user_id.to_string(),
+            remaining_requests: self.config.max_requests,  // Full quota
+            reset_at: now + Duration::seconds(self.config.window_seconds as i64),
+        };
+        
+        store.insert(user_id.to_string(), new_info);
+        Ok(())
+    }
+    
     pub async fn get_limit_info(&self, user_id: &str) -> Option<RateLimitInfo> {
         let store = self.store.lock().unwrap();
         store.get(user_id).cloned()

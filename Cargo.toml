@@ -12,6 +12,7 @@ tower-http = { version = "0.5.0", features = ["cors", "trace"] }
 # Serialization/Deserialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+serde_yaml = "0.9"
 
 # HTTP client
 reqwest = { version = "0.11", features = ["json"] }
@@ -29,6 +30,7 @@ redis = { version = "0.23", features = ["tokio-comp"] }
 
 # Database
 sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite"] }
+sled = "0.34.7"  # Embedded database
 
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
@@ -36,3 +38,6 @@ rand = "0.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1.4", features = ["v4", "serde"] }
+
+[dev-dependencies]
+tempfile = "3.8"

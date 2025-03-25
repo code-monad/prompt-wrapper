@@ -26,5 +26,6 @@ Cargo.lock
 # Log files
 *.log
 
+# Cursor files
 .cursor/
 .cursorrules
