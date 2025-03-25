@@ -132,7 +132,9 @@ async fn main() -> anyhow::Result<()> {
         .with_state(app_state);
 
     // Start server
-    let addr = SocketAddr::from(([127, 0, 0, 1], config.server.port));
+    let addr = format!("{}:{}", config.server.host, config.server.port)
+        .parse::<SocketAddr>()
+        .expect("Invalid socket address");
     tracing::info!("listening on {}", addr);
     let listener = TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
