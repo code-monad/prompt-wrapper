@@ -14,6 +14,7 @@ use crate::models::{Saying, SayingSource};
 use crate::preset::Preset;
 use crate::config::TEST_USER_ID;
 use crate::AppState;
+use crate::languages::{Language, get_all_languages, get_language_by_id};
 
 #[derive(Debug, Error)]
 pub enum ApiError {
@@ -70,6 +71,7 @@ pub struct SayingResponse {
 pub struct SayingRequest {
     pub prompt: Option<String>,
     pub preset_id: Option<String>,
+    pub language_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -96,6 +98,7 @@ pub struct PresetResponse {
 #[derive(Debug, Deserialize)]
 pub struct StatusQuery {
     pub user_id: Option<String>,
+    pub language_id: Option<String>,
 }
 
 // Convert Preset to PresetResponse
@@ -192,6 +195,11 @@ pub async fn create_saying(
 ) -> Result<impl IntoResponse, ApiError> {
     let user_id = params.user_id.unwrap_or_else(|| "default_user".to_string());
     
+    // Get the language ID from the query or the request body, defaulting to English
+    let language_id = params.language_id
+        .or(payload.language_id.clone())
+        .unwrap_or_else(|| crate::languages::DEFAULT_LANGUAGE_ID.to_string());
+    
     // First check if user is in cooldown period (rate limited)
     let is_rate_limited = match state.rate_limiter.get_limit_info(&user_id).await {
         Some(info) => info.remaining_requests == 0,
@@ -249,9 +257,21 @@ pub async fn create_saying(
         
         // No prompt or preset specified, try to use the selected preset for the user
         (None, None) => {
-            let rate_limit_info = state.rate_limiter.get_limit_info(&user_id).await
-                .ok_or_else(|| ApiError::BadRequest("Please provide a prompt or preset_id".to_string()))?;
+            // Get or initialize rate limit info for the user
+            let rate_limit_info = match state.rate_limiter.get_limit_info(&user_id).await {
+                Some(info) => info,
+                None => {
+                    // User has no rate limit info, initialize it first
+                    state.rate_limiter.reset(&user_id).await
+                        .map_err(|e| ApiError::InternalError(format!("Failed to initialize rate limit: {}", e)))?;
+                    
+                    // Now get the newly initialized rate limit info
+                    state.rate_limiter.get_limit_info(&user_id).await
+                        .ok_or_else(|| ApiError::InternalError("Failed to get rate limit info after initialization".to_string()))?
+                }
+            };
             
+            // Get or select a preset for the user
             let preset = state.presets.get_or_select_preset(&user_id, rate_limit_info.reset_at)
                 .map_err(|e| ApiError::InternalError(format!("Failed to select preset: {}", e)))?;
             
@@ -262,8 +282,20 @@ pub async fn create_saying(
         }
     };
 
-    tracing::info!("Processing request for user '{}' with prompt: {} and preset: {:?}", 
-                   user_id, user_prompt, preset_id);
+    // Append translation instructions to system_prompt if language is not English
+    let system_prompt_with_language = if language_id != crate::languages::DEFAULT_LANGUAGE_ID {
+        let translation_prompt = crate::languages::get_translation_prompt(&language_id);
+        if !translation_prompt.is_empty() {
+            format!("{}\n\n{}", system_prompt, translation_prompt)
+        } else {
+            system_prompt
+        }
+    } else {
+        system_prompt
+    };
+
+    tracing::info!("Processing request for user '{}' with prompt: {} and preset: {:?} in language: {}", 
+                   user_id, user_prompt, preset_id, language_id);
 
     // For users not in cooldown, check rate limit before proceeding with LLM
     let can_proceed = state.rate_limiter.check(&user_id).await
@@ -294,13 +326,13 @@ pub async fn create_saying(
             } else {
                 // We have cache but we'll try LLM anyway due to random determination
                 tracing::info!("Cache available but randomly determined to use LLM for user {}", user_id);
-                fetch_from_llm(&state, &system_prompt, &user_prompt, preset_id).await?
+                fetch_from_llm(&state, &system_prompt_with_language, &user_prompt, preset_id).await?
             }
         },
         // No cached result found, or error occurred while searching - query LLM
         None => {
             tracing::info!("No cached result found, querying LLM for prompt: {}", user_prompt);
-            fetch_from_llm(&state, &system_prompt, &user_prompt, preset_id).await?
+            fetch_from_llm(&state, &system_prompt_with_language, &user_prompt, preset_id).await?
         }
     };
     
@@ -431,4 +463,18 @@ pub async fn get_preset(
 pub struct SayingsQuery {
     pub user_id: Option<String>,
     pub limit: Option<usize>,
+}
+
+// GET /languages - Get all available languages
+pub async fn get_languages() -> Json<Vec<Language>> {
+    let languages = get_all_languages();
+    Json(languages)
+}
+
+// GET /languages/:language_id - Get a specific language by ID
+pub async fn get_language(
+    Path(language_id): Path<String>,
+) -> Result<Json<Language>, ApiError> {
+    let language = get_language_by_id(&language_id);
+    Ok(Json(language))
 } 

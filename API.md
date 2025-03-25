@@ -6,13 +6,14 @@
 
 #### Get Sayings
 ```http
-GET /sayings?user_id={user_id}&limit={limit}
+GET /sayings?user_id={user_id}&limit={limit}&language_id={language_id}
 ```
 Retrieves a list of sayings for a user.
 
 **Query Parameters:**
 - `user_id` (optional): The user identifier. Defaults to "default_user"
 - `limit` (optional): Maximum number of sayings to return. Defaults to 10
+- `language_id` (optional): Language code for translation. Defaults to "en"
 
 **Response:**
 ```json
@@ -28,12 +29,13 @@ Retrieves a list of sayings for a user.
 
 #### Get Latest Saying
 ```http
-GET /sayings/latest?user_id={user_id}
+GET /sayings/latest?user_id={user_id}&language_id={language_id}
 ```
 Retrieves the latest saying for a user.
 
 **Query Parameters:**
 - `user_id` (optional): The user identifier. Defaults to "default_user"
+- `language_id` (optional): Language code for translation. Defaults to "en"
 
 **Response:**
 ```json
@@ -47,21 +49,24 @@ Retrieves the latest saying for a user.
 
 #### Create Saying
 ```http
-POST /sayings?user_id={user_id}
+POST /sayings?user_id={user_id}&language_id={language_id}
 ```
 Creates a new saying for a user.
 
 **Query Parameters:**
 - `user_id` (optional): The user identifier. Defaults to "default_user"
+- `language_id` (optional): Language code for translation. Defaults to "en"
 
 **Request Body:**
 ```json
 {
   "prompt": "string (optional)",
-  "preset_id": "string (optional)"
+  "preset_id": "string (optional)",
+  "language_id": "string (optional)"
 }
 ```
 Either provide a prompt or a preset_id. If neither is provided, a preset will be selected for the user automatically.
+The language_id can be specified in either the query or the request body.
 
 **Response:**
 ```json
@@ -146,6 +151,38 @@ Retrieves a specific preset by ID.
 }
 ```
 
+#### Get All Languages
+```http
+GET /languages
+```
+Retrieves all supported languages.
+
+**Response:**
+```json
+[
+  {
+    "id": "string",
+    "name": "string",
+    "native_name": "string"
+  }
+]
+```
+
+#### Get Language by ID
+```http
+GET /languages/{language_id}
+```
+Retrieves a specific language by ID.
+
+**Response:**
+```json
+{
+  "id": "string",
+  "name": "string",
+  "native_name": "string"
+}
+```
+
 ### Global Cache System
 
 Sayings with the same prompt and preset combination are cached across all users. This means:
@@ -153,19 +190,27 @@ Sayings with the same prompt and preset combination are cached across all users.
 - The system prioritizes cache responses for rate-limited users
 - Random determination is used to decide whether to use cache or LLM for new requests
 
+### Multi-language Support
+
+The system supports multiple languages through LLM translation:
+- Specify a language_id in the request to get responses in that language
+- For non-English languages, the response will include both English and translated versions
+- The system does not store separate translations in the cache; they are generated on-the-fly
+
 ## 中文
 
 ### 接口列表
 
 #### 获取一日一句列表
 ```http
-GET /sayings?user_id={user_id}&limit={limit}
+GET /sayings?user_id={user_id}&limit={limit}&language_id={language_id}
 ```
 获取用户的一日一句列表。
 
 **查询参数：**
 - `user_id` (可选)：用户标识符。默认为 "default_user"
 - `limit` (可选)：返回的最大一日一句数量。默认为10
+- `language_id` (可选)：翻译的语言代码。默认为 "en"（英语）
 
 **响应：**
 ```json
@@ -181,12 +226,13 @@ GET /sayings?user_id={user_id}&limit={limit}
 
 #### 获取最新一日一句
 ```http
-GET /sayings/latest?user_id={user_id}
+GET /sayings/latest?user_id={user_id}&language_id={language_id}
 ```
 获取用户的最新一日一句。
 
 **查询参数：**
 - `user_id` (可选)：用户标识符。默认为 "default_user"
+- `language_id` (可选)：翻译的语言代码。默认为 "en"（英语）
 
 **响应：**
 ```json
@@ -200,21 +246,24 @@ GET /sayings/latest?user_id={user_id}
 
 #### 创建一日一句
 ```http
-POST /sayings?user_id={user_id}
+POST /sayings?user_id={user_id}&language_id={language_id}
 ```
 为用户创建一个新一日一句。
 
 **查询参数：**
 - `user_id` (可选)：用户标识符。默认为 "default_user"
+- `language_id` (可选)：翻译的语言代码。默认为 "en"（英语）
 
 **请求体：**
 ```json
 {
   "prompt": "字符串 (可选)",
-  "preset_id": "字符串 (可选)"
+  "preset_id": "字符串 (可选)",
+  "language_id": "字符串 (可选)"
 }
 ```
 提供一个提示词或预设ID。如果两者都未提供，系统将自动为用户选择一个预设。
+语言ID可以在查询参数或请求体中指定。
 
 **响应：**
 ```json
@@ -299,9 +348,48 @@ GET /presets/{preset_id}
 }
 ```
 
+#### 获取所有支持的语言
+```http
+GET /languages
+```
+获取所有支持的语言。
+
+**响应：**
+```json
+[
+  {
+    "id": "字符串",
+    "name": "字符串",
+    "native_name": "字符串"
+  }
+]
+```
+
+#### 通过ID获取语言
+```http
+GET /languages/{language_id}
+```
+通过ID获取特定语言。
+
+**响应：**
+```json
+{
+  "id": "字符串",
+  "name": "字符串",
+  "native_name": "字符串"
+}
+```
+
 ### 全局缓存系统
 
 具有相同提示词和预设组合的一日一句会在所有用户之间共享缓存。这意味着：
 - 来自不同用户的相似请求可能会从缓存中收到相同的响应
 - 系统优先为被限流的用户提供缓存响应
-- 系统使用随机决定是否为新请求使用缓存或LLM 
+- 系统使用随机决定是否为新请求使用缓存或LLM
+
+### 多语言支持
+
+系统通过LLM翻译支持多种语言：
+- 在请求中指定language_id以获取该语言的响应
+- 对于非英语语言，响应将同时包含英语和翻译版本
+- 系统不会在缓存中存储单独的翻译版本；它们是即时生成的 

@@ -18,6 +18,7 @@ mod openrouter;
 mod preset;
 mod rate_limiter;
 mod storage;
+pub mod languages;
 
 use crate::config::{Config, StorageType, TEST_USER_ID};
 use crate::models::{Saying, SayingSource};
@@ -113,8 +114,7 @@ async fn main() -> anyhow::Result<()> {
     // Define routes
     let app = Router::new()
         // Sayings resource
-        .route("/sayings", get(handlers::get_sayings))
-        .route("/sayings", post(handlers::create_saying))
+        .route("/sayings", get(handlers::get_sayings).post(handlers::create_saying))
         .route("/sayings/latest", get(handlers::get_latest_saying))
         
         // User status resource
@@ -123,6 +123,10 @@ async fn main() -> anyhow::Result<()> {
         // Presets resource
         .route("/presets", get(handlers::get_presets))
         .route("/presets/:preset_id", get(handlers::get_preset))
+        
+        // Languages resource
+        .route("/languages", get(handlers::get_languages))
+        .route("/languages/:language_id", get(handlers::get_language))
         
         .layer(cors)
         .with_state(app_state);

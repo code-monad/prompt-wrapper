@@ -145,7 +145,7 @@ impl OpenRouterClient {
         // Use provided model or default
         let model = model_id.unwrap_or_else(|| 
             if self.config.model.is_empty() { 
-                "openai/gpt-3.5-turbo".to_string() 
+                "mistralai/mistral-nemo".to_string() 
             } else { 
                 self.config.model.clone() 
             }
