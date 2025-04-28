@@ -70,6 +70,7 @@ pub struct SayingResponse {
 #[derive(Debug, Deserialize)]
 pub struct SayingRequest {
     pub prompt: Option<String>,
+    pub user_id: Option<String>,
     pub preset_id: Option<String>,
     pub language_id: Option<String>,
 }
@@ -193,7 +194,7 @@ pub async fn create_saying(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<SayingRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let user_id = params.user_id.unwrap_or_else(|| "default_user".to_string());
+    let user_id = params.user_id.or(payload.user_id).unwrap_or_else(|| "default_user".to_string());
     
     // Get the language ID from the query or the request body, defaulting to English
     let language_id = params.language_id
