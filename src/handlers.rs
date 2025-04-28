@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use chrono::{DateTime, Utc};
 use std::sync::Arc;
-use rand;
+use rand::{self, seq::SliceRandom};
 use thiserror::Error;
 
 use crate::models::{Saying, SayingSource};
@@ -206,35 +206,53 @@ pub async fn create_saying(
         None => false, // No rate limit info yet, not limited
     };
 
-    // If user is rate limited, try to return their last saying or any cached saying
+    // If user is rate limited, try to return a cached saying randomly
     if is_rate_limited {
-        tracing::info!("User {} is in cooldown period, returning cached saying instead of LLM query", user_id);
+        tracing::info!("User {} is in cooldown period, attempting to return cached saying", user_id);
         
         // First try to get their own last saying
-        if let Ok(Some(last_saying)) = state.storage.get_last_saying(&user_id).await {
-            tracing::debug!("Returning user's last saying during cooldown period");
-            return Ok((StatusCode::OK, Json(SayingResponse::from(last_saying))));
-        }
+        let mut potential_saying = state.storage.get_last_saying(&user_id).await.ok().flatten();
         
-        // If no personal saying is available, try to get any cached saying from the system
-        match state.storage.get_any_cached_sayings(1).await {
-            Ok(sayings) if !sayings.is_empty() => {
-                tracing::debug!("Returning cached saying from system during cooldown period");
-                return Ok((StatusCode::OK, Json(SayingResponse::from(sayings[0].clone()))));
+        // If no personal saying is available, try to get any cached sayings from the system
+        if potential_saying.is_none() {
+            match state.storage.get_any_cached_sayings(5).await { // Fetch up to 5
+                Ok(sayings) if !sayings.is_empty() => {
+                    // Select one randomly
+                    potential_saying = sayings.choose(&mut rand::thread_rng()).cloned();
+                    if potential_saying.is_some() {
+                        tracing::debug!("Returning randomly selected cached saying from system during cooldown");
+                    } else {
+                        tracing::warn!("Failed to select a random saying from the fetched list for user {}", user_id);
+                    }
+                }
+                Ok(_) => {
+                    tracing::warn!("No cached sayings available for rate-limited user {}", user_id);
+                }
+                Err(err) => {
+                    tracing::error!("Error fetching cached sayings for rate-limited user {}: {}", user_id, err);
+                    // Fall through to return rate limit error
+                }
             }
-            Ok(_) => {
-                tracing::warn!("No cached sayings available for rate-limited user {}", user_id);
-                // Continue with normal flow if no cached sayings are available
-                // This is a fallback, but we'll still respect the rate limit check below
-            }
-            Err(err) => {
-                tracing::error!("Error fetching cached sayings: {}", err);
-                // Continue with normal flow, but we'll still respect the rate limit check below
-            }
+        } else {
+            tracing::debug!("Returning user's last saying during cooldown period");
+        }
+
+        // If we found a saying (either last or random cached), return it
+        if let Some(saying) = potential_saying {
+             // Ensure the source is marked as cache
+             let cached_saying = Saying {
+                source: SayingSource::Cache,
+                ..saying
+             };
+            return Ok((StatusCode::OK, Json(SayingResponse::from(cached_saying))));
+        } else {
+            // If absolutely no saying could be returned, enforce rate limit
+            tracing::warn!("Rate limit exceeded for user {} and no cached saying found.", user_id);
+            return Err(ApiError::RateLimited("You have exceeded the rate limit and no cached saying was available.".to_string()));
         }
     }
 
-    // Access check and rate limiting
+    // Access check (moved after initial rate limit check)
     is_user_allowed(&user_id)?;
     
     // Resolve prompt selection regardless of rate limiting
@@ -297,44 +315,19 @@ pub async fn create_saying(
     tracing::info!("Processing request for user '{}' with prompt: {} and preset: {:?} in language: {}", 
                    user_id, user_prompt, preset_id, language_id);
 
-    // For users not in cooldown, check rate limit before proceeding with LLM
+    // Check rate limit before proceeding with LLM
     let can_proceed = state.rate_limiter.check(&user_id).await
         .map_err(|e| ApiError::InternalError(format!("Failed to check rate limit: {}", e)))?;
     
     if !can_proceed {
+        // This should technically not be reached if the logic above is correct, but kept as safeguard
+        tracing::warn!("Rate limit check failed unexpectedly after initial check for user {}", user_id);
         return Err(ApiError::RateLimited("You have exceeded the rate limit for this endpoint".to_string()));
     }
     
-    // First check if we have a cached response for this prompt + preset combination
-    let cached_result = state.storage.find_cached_saying(&user_prompt, preset_id.as_deref()).await
-        .map_err(|e| ApiError::InternalError(format!("Failed to search for cached saying: {}", e)))?;
-    
-    // Random determination if user should use LLM or cache in new period
-    // Generate a random number between 0 and 9
-    let use_llm = {
-        let random_val = rand::random::<u8>() % 10;
-        // 70% chance to use LLM, 30% to use cache
-        random_val < 7
-    };
-
-    let saying = match cached_result {
-        // If we have a cached result, decide if we should use it based on random determination
-        Some(cached_saying) => {
-            if !use_llm {
-                tracing::info!("Randomly determined to use cached saying for user {}", user_id);
-                cached_saying
-            } else {
-                // We have cache but we'll try LLM anyway due to random determination
-                tracing::info!("Cache available but randomly determined to use LLM for user {}", user_id);
-                fetch_from_llm(&state, &system_prompt_with_language, &user_prompt, preset_id).await?
-            }
-        },
-        // No cached result found, or error occurred while searching - query LLM
-        None => {
-            tracing::info!("No cached result found, querying LLM for prompt: {}", user_prompt);
-            fetch_from_llm(&state, &system_prompt_with_language, &user_prompt, preset_id).await?
-        }
-    };
+    // Rate limit allows proceeding, fetch directly from LLM
+    tracing::info!("Rate limit permits, querying LLM for prompt: {} for user {}", user_prompt, user_id);
+    let saying = fetch_from_llm(&state, &system_prompt_with_language, &user_prompt, preset_id).await?;
     
     // Store the saying for this user
     if let Err(e) = state.storage.save_saying(&user_id, saying.clone()).await {
