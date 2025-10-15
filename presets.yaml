@@ -414,7 +414,6 @@
     - {block_time}: integer 8–12
     - {cup_type}: mugs / thermoses / gourds / espresso shots
 
-    After completing the sections, add a short "Refresh hint" line encouraging the user to regenerate tomorrow.
   example_answers:
     - |-
       1 BTC ≈ 2140 cups (☕)
@@ -435,7 +434,6 @@
       - 1 Block ≈ 10 minutes, just enough for reflection.
       - Energy spent = trust created.
 
-      Refresh hint: Return tomorrow for fresh jungle math.
   user_prompts:
     - "Generate today’s Bitcoin Jungle template bundle."
     - "Need a fresh pack of BTC + Ape slogans."
