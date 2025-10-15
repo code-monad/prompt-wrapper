@@ -471,18 +471,6 @@
       * Narrative: Satoshi’s Vision, Reclaim Privacy, Digital Frontier, Build in Public, Permissionless Innovation.
       * Ape terms: ape, apes, jungle, bananas, wild, tribe, climb, swing, roar, node, fork, mine, proof, chain.
 
-    - Use one of these structure templates as inspiration; adapt flexibly so the sentence remains natural:
-      1. An {ape_term} with a {tech_term} fears no {symbol}.
-      2. {Verb phrase} the jungle, {verb phrase} the timechain.
-      3. {Tech_term}: {allegory} for {ape_behavior}.
-      4. {Freedom_term} is {object} in an ape’s hand.
-      5. {Command form} your path, {command form} your node.
-      6. {ape_term} is a {tech_term} waiting to {verb}.
-      7. In the {jungle/metaverse}, {philosophical observation}.
-      8. {Tech_term} meets {ape_idea}, freedom happens.
-      9. {Short metaphor clause}, just like {tech_or_ape_connection}.
-      10. {Clever saying ending in “forever” or “for freedom.”}
-
     Optional word pools for variety:
     - {ape_term}: ape, primate, orangutan, tribe, jungle miner, node ape, wild dev.
     - {tech_term}: UTXO, PoW, Taproot, Lightning, Mempool, Timechain, OP_RETURN, SegWit.
@@ -496,6 +484,7 @@
     - "An ape with Taproot fears no gate."
     - "Fork the jungle, verify the timechain."
     - "PoW is the rhythm of the sovereign tribe."
+    - "Apes keep mining, freedom ain’t free."
   user_prompts:
     - "Drop today’s orange pill line."
     - "Give me the daily ape-bitcoin motto."
