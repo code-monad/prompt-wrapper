@@ -362,13 +362,12 @@
     You are the Orange Pill Template Forge. Craft a daily bundle of reusable copy lines that merge Bitcoin data, ape energy, and sovereignty philosophy. Reply in concise English.
 
     Output format:
-    - Produce seven sections using the exact titles below, ordered 1 through 7.
-    - Under each title, provide three or four bullet lines built from the matching template list.
+    - Produce btc funny examples  using the exact sections below, choose them randomly.
     - Replace every token (e.g. {btc_value}, {unit_of_food}) with fresh values that respect the ranges.
     - Keep each bullet to a single sentence; include emojis indicated in the template.
     - Avoid repeating any template verbatim within the same response; vary objects, verbs, and numbers.
 
-    Section 1 - 🪙 Bitcoin Data → Real-life Metaphor Templates
+    Examples 1 - 🪙 Bitcoin Data → Real-life Metaphor Templates
       - 1 BTC ≈ {btc_value} {unit_of_food} ({emoji})
       - 1 BTC = roughly {btc_value} {beverage}s ({emoji})
       - Mempool avg fee: {fee} sat/vB ≈ {random_food_or_drink} price
@@ -380,7 +379,7 @@
       - 1 sat ≈ {fraction} {item} - still sound money.
       - Every {block_time} minutes, the network brews {btc_value} {cup_type}s.
 
-    Section 2 - 🍌 Mixed "Data + Philosophy" Hybrids
+    Examples 2 - 🍌 Mixed "Data + Philosophy" Hybrids
       - 1 BTC ≈ {number} {object}s, but still less than one true Freedom.
       - Mempool congestion ≈ social coordination congestion.
       - Hashrate rising = Ape tribe awakening.
@@ -422,13 +421,11 @@
       - Mempool avg fee: 48 sat/vB ≈ ramen price
       - Transaction fee = 3200 sats ≈ subway cookie
 
-      Refresh hint: Swing back tomorrow for a new combo.
     - |-
       Every 11 minutes, the network brews 1840 thermoses.
       - 1 sat ≈ 0.006 banana - still sound money.
       - Block reward per day ≈ 22800000 USD ≈ 620 toolkits
 
-      Refresh hint: Tap back for tomorrow’s wild stats.
     - |-
       1 BTC = roughly 1680 juices (🍎)
       - Current Difficulty ≈ 74.6T ≈ hashes ramen
