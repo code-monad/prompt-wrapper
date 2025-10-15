@@ -1,38 +1,40 @@
 use axum::{
     extract::{Json, Path, Query, State},
-    response::{IntoResponse, Response},
     http::StatusCode,
+    response::{IntoResponse, Response},
 };
-use serde::{Deserialize, Serialize};
-use serde_json::json;
 use chrono::{DateTime, Utc};
-use std::sync::Arc;
 use rand::{self, seq::SliceRandom};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use std::sync::Arc;
 use thiserror::Error;
 
+use crate::bitcoin::BitcoinData;
+use crate::config::TEST_USER_ID;
+use crate::languages::{get_all_languages, get_language_by_id, Language};
 use crate::models::{Saying, SayingSource};
 use crate::preset::Preset;
-use crate::config::TEST_USER_ID;
 use crate::AppState;
-use crate::languages::{Language, get_all_languages, get_language_by_id};
+use anyhow::{anyhow, Context, Result as AnyResult};
 
 #[derive(Debug, Error)]
 pub enum ApiError {
     #[error("Access denied: {0}")]
     AccessDenied(String),
-    
+
     #[error("Rate limit exceeded: {0}")]
     RateLimited(String),
-    
+
     #[error("Not found: {0}")]
     NotFound(String),
-    
+
     #[error("Bad request: {0}")]
     BadRequest(String),
-    
+
     #[error("Internal server error: {0}")]
     InternalError(String),
-    
+
     #[error("OpenRouter API error: {0}")]
     OpenRouterError(#[from] anyhow::Error),
 }
@@ -49,7 +51,7 @@ impl IntoResponse for ApiError {
         };
 
         tracing::error!("{}: {}", status, error_message);
-        
+
         let body = Json(json!({
             "error": self.to_string(),
             "message": error_message,
@@ -65,6 +67,7 @@ pub struct SayingResponse {
     pub content: String,
     pub created_at: DateTime<Utc>,
     pub source: String,
+    pub extra: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -125,6 +128,7 @@ impl From<Saying> for SayingResponse {
             content: saying.content,
             created_at: saying.created_at,
             source: String::from(saying.source),
+            extra: saying.extra,
         }
     }
 }
@@ -142,7 +146,9 @@ fn is_user_allowed(user_id: &str) -> Result<(), ApiError> {
     #[cfg(not(debug_assertions))]
     if user_id == TEST_USER_ID {
         tracing::warn!("Blocked test user access attempt in release mode");
-        return Err(ApiError::AccessDenied("This user ID is not allowed in production".to_string()));
+        return Err(ApiError::AccessDenied(
+            "This user ID is not allowed in production".to_string(),
+        ));
     }
 
     // Regular users are always allowed
@@ -155,19 +161,23 @@ pub async fn get_sayings(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<SayingResponse>>, ApiError> {
     let user_id = params.user_id.unwrap_or_else(|| "default_user".to_string());
-    
+
     // Check if user is allowed
     is_user_allowed(&user_id)?;
-    
+
     let limit = params.limit.unwrap_or(10);
-    
-    let sayings = state.storage.get_sayings(&user_id, limit).await
+
+    let sayings = state
+        .storage
+        .get_sayings(&user_id, limit)
+        .await
         .map_err(|e| ApiError::InternalError(format!("Failed to get sayings: {}", e)))?;
-    
-    let response = sayings.into_iter()
+
+    let response = sayings
+        .into_iter()
         .map(SayingResponse::from)
         .collect::<Vec<_>>();
-    
+
     Ok(Json(response))
 }
 
@@ -177,14 +187,17 @@ pub async fn get_latest_saying(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<SayingResponse>, ApiError> {
     let user_id = params.user_id.unwrap_or_else(|| "default_user".to_string());
-    
+
     // Check if user is allowed
     is_user_allowed(&user_id)?;
-    
-    let saying = state.storage.get_last_saying(&user_id).await
+
+    let saying = state
+        .storage
+        .get_last_saying(&user_id)
+        .await
         .map_err(|e| ApiError::InternalError(format!("Failed to get saying: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("User has no saved sayings".to_string()))?;
-    
+
     Ok(Json(SayingResponse::from(saying)))
 }
 
@@ -194,13 +207,17 @@ pub async fn create_saying(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<SayingRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let user_id = params.user_id.or(payload.user_id).unwrap_or_else(|| "default_user".to_string());
-    
+    let user_id = params
+        .user_id
+        .or(payload.user_id)
+        .unwrap_or_else(|| "default_user".to_string());
+
     // Get the language ID from the query or the request body, defaulting to English
-    let language_id = params.language_id
+    let language_id = params
+        .language_id
         .or(payload.language_id.clone())
         .unwrap_or_else(|| crate::languages::DEFAULT_LANGUAGE_ID.to_string());
-    
+
     // First check if user is in cooldown period (rate limited)
     let is_rate_limited = match state.rate_limiter.get_limit_info(&user_id).await {
         Some(info) => info.remaining_requests == 0,
@@ -209,28 +226,44 @@ pub async fn create_saying(
 
     // If user is rate limited, try to return a cached saying randomly
     if is_rate_limited {
-        tracing::info!("User {} is in cooldown period, attempting to return cached saying", user_id);
-        
+        tracing::info!(
+            "User {} is in cooldown period, attempting to return cached saying",
+            user_id
+        );
+
         // First try to get their own last saying
         let mut potential_saying = state.storage.get_last_saying(&user_id).await.ok().flatten();
-        
+
         // If no personal saying is available, try to get any cached sayings from the system
         if potential_saying.is_none() {
-            match state.storage.get_any_cached_sayings(5).await { // Fetch up to 5
+            match state.storage.get_any_cached_sayings(5).await {
+                // Fetch up to 5
                 Ok(sayings) if !sayings.is_empty() => {
                     // Select one randomly
                     potential_saying = sayings.choose(&mut rand::thread_rng()).cloned();
                     if potential_saying.is_some() {
-                        tracing::debug!("Returning randomly selected cached saying from system during cooldown");
+                        tracing::debug!(
+                            "Returning randomly selected cached saying from system during cooldown"
+                        );
                     } else {
-                        tracing::warn!("Failed to select a random saying from the fetched list for user {}", user_id);
+                        tracing::warn!(
+                            "Failed to select a random saying from the fetched list for user {}",
+                            user_id
+                        );
                     }
                 }
                 Ok(_) => {
-                    tracing::warn!("No cached sayings available for rate-limited user {}", user_id);
+                    tracing::warn!(
+                        "No cached sayings available for rate-limited user {}",
+                        user_id
+                    );
                 }
                 Err(err) => {
-                    tracing::error!("Error fetching cached sayings for rate-limited user {}: {}", user_id, err);
+                    tracing::error!(
+                        "Error fetching cached sayings for rate-limited user {}: {}",
+                        user_id,
+                        err
+                    );
                     // Fall through to return rate limit error
                 }
             }
@@ -240,66 +273,121 @@ pub async fn create_saying(
 
         // If we found a saying (either last or random cached), return it
         if let Some(saying) = potential_saying {
-             // Ensure the source is marked as cache
-             let cached_saying = Saying {
+            // Ensure the source is marked as cache
+            let cached_saying = Saying {
                 source: SayingSource::Cache,
                 ..saying
-             };
+            };
             return Ok((StatusCode::OK, Json(SayingResponse::from(cached_saying))));
         } else {
             // If absolutely no saying could be returned, enforce rate limit
-            tracing::warn!("Rate limit exceeded for user {} and no cached saying found.", user_id);
-            return Err(ApiError::RateLimited("You have exceeded the rate limit and no cached saying was available.".to_string()));
+            tracing::warn!(
+                "Rate limit exceeded for user {} and no cached saying found.",
+                user_id
+            );
+            return Err(ApiError::RateLimited(
+                "You have exceeded the rate limit and no cached saying was available.".to_string(),
+            ));
         }
     }
 
     // Access check (moved after initial rate limit check)
     is_user_allowed(&user_id)?;
-    
+
     // Resolve prompt selection regardless of rate limiting
-    let (system_prompt, user_prompt, preset_id) = match (payload.prompt.clone(), payload.preset_id.clone()) {
-        // User provided their own prompt
-        (Some(prompt), _) => {
-            ("You are a helpful assistant.".to_string(), prompt, None)
-        },
-        
-        // User specified a preset
-        (None, Some(preset_id)) => {
-            let preset = state.presets.get_preset_by_id(&preset_id)
-                .ok_or_else(|| ApiError::BadRequest(format!("Preset not found: {}", preset_id)))?;
-            
-            let prompt = state.presets.random_user_prompt(&preset_id)
-                .map_err(|e| ApiError::BadRequest(format!("Failed to get prompt from preset: {}", e)))?;
-            
-            (preset.system_prompt, prompt, Some(preset_id))
-        },
-        
-        // No prompt or preset specified, try to use the selected preset for the user
-        (None, None) => {
-            // Get or initialize rate limit info for the user
-            let rate_limit_info = match state.rate_limiter.get_limit_info(&user_id).await {
-                Some(info) => info,
-                None => {
-                    // User has no rate limit info, initialize it first
-                    state.rate_limiter.reset(&user_id).await
-                        .map_err(|e| ApiError::InternalError(format!("Failed to initialize rate limit: {}", e)))?;
-                    
-                    // Now get the newly initialized rate limit info
-                    state.rate_limiter.get_limit_info(&user_id).await
-                        .ok_or_else(|| ApiError::InternalError("Failed to get rate limit info after initialization".to_string()))?
+    let (system_prompt, user_prompt, preset_id) =
+        match (payload.prompt.clone(), payload.preset_id.clone()) {
+            // User provided their own prompt
+            (Some(prompt), _) => ("You are a helpful assistant.".to_string(), prompt, None),
+
+            // User specified a preset
+            (None, Some(preset_id)) => {
+                let preset = state.presets.get_preset_by_id(&preset_id).ok_or_else(|| {
+                    ApiError::BadRequest(format!("Preset not found: {}", preset_id))
+                })?;
+
+                let prompt = state.presets.random_user_prompt(&preset_id).map_err(|e| {
+                    ApiError::BadRequest(format!("Failed to get prompt from preset: {}", e))
+                })?;
+
+                (preset.system_prompt, prompt, Some(preset_id))
+            }
+
+            // No prompt or preset specified, try to use the selected preset for the user
+            (None, None) => {
+                // Get or initialize rate limit info for the user
+                let rate_limit_info = match state.rate_limiter.get_limit_info(&user_id).await {
+                    Some(info) => info,
+                    None => {
+                        // User has no rate limit info, initialize it first
+                        state.rate_limiter.reset(&user_id).await.map_err(|e| {
+                            ApiError::InternalError(format!(
+                                "Failed to initialize rate limit: {}",
+                                e
+                            ))
+                        })?;
+
+                        // Now get the newly initialized rate limit info
+                        state
+                            .rate_limiter
+                            .get_limit_info(&user_id)
+                            .await
+                            .ok_or_else(|| {
+                                ApiError::InternalError(
+                                    "Failed to get rate limit info after initialization"
+                                        .to_string(),
+                                )
+                            })?
+                    }
+                };
+
+                // Get or select a preset for the user
+                let preset = state
+                    .presets
+                    .get_or_select_preset(&user_id, rate_limit_info.reset_at)
+                    .map_err(|e| {
+                        ApiError::InternalError(format!("Failed to select preset: {}", e))
+                    })?;
+
+                let prompt = state.presets.random_user_prompt(&preset.id).map_err(|e| {
+                    ApiError::InternalError(format!("Failed to get prompt from preset: {}", e))
+                })?;
+
+                (preset.system_prompt, prompt, Some(preset.id))
+            }
+        };
+
+    let mut final_user_prompt = user_prompt.clone();
+    let mut orange_pill_context: Option<BitcoinData> = None;
+
+    if let Some(ref preset_key) = preset_id {
+        if preset_key == "orange-pill" {
+            match state.bitcoin.fetch_data().await {
+                Ok(data) => {
+                    let context_lines = build_orange_pill_context_lines(&data);
+                    if !context_lines.is_empty() {
+                        let formatted_context = context_lines
+                            .iter()
+                            .map(|line| format!("- {}", line))
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        final_user_prompt = format!(
+                            "{}\n\nUse these Bitcoin signals as subtle inspiration:\n{}\nKeep the sentence unique and within 16 words.",
+                            user_prompt,
+                            formatted_context
+                        );
+                    }
+                    orange_pill_context = Some(data);
                 }
-            };
-            
-            // Get or select a preset for the user
-            let preset = state.presets.get_or_select_preset(&user_id, rate_limit_info.reset_at)
-                .map_err(|e| ApiError::InternalError(format!("Failed to select preset: {}", e)))?;
-            
-            let prompt = state.presets.random_user_prompt(&preset.id)
-                .map_err(|e| ApiError::InternalError(format!("Failed to get prompt from preset: {}", e)))?;
-            
-            (preset.system_prompt, prompt, Some(preset.id))
+                Err(err) => {
+                    tracing::warn!(
+                        "Failed to fetch Bitcoin context for orange-pill preset: {}",
+                        err
+                    );
+                }
+            }
         }
-    };
+    }
 
     // Append translation instructions to system_prompt if language is not English
     let system_prompt_with_language = if language_id != crate::languages::DEFAULT_LANGUAGE_ID {
@@ -313,23 +401,54 @@ pub async fn create_saying(
         system_prompt
     };
 
-    tracing::info!("Processing request for user '{}' with prompt: {} and preset: {:?} in language: {}", 
-                   user_id, user_prompt, preset_id, language_id);
+    tracing::info!(
+        "Processing request for user '{}' with prompt: {} and preset: {:?} in language: {}",
+        user_id,
+        final_user_prompt,
+        preset_id,
+        language_id
+    );
 
     // Check rate limit before proceeding with LLM
-    let can_proceed = state.rate_limiter.check(&user_id).await
+    let can_proceed = state
+        .rate_limiter
+        .check(&user_id)
+        .await
         .map_err(|e| ApiError::InternalError(format!("Failed to check rate limit: {}", e)))?;
-    
+
     if !can_proceed {
         // This should technically not be reached if the logic above is correct, but kept as safeguard
-        tracing::warn!("Rate limit check failed unexpectedly after initial check for user {}", user_id);
-        return Err(ApiError::RateLimited("You have exceeded the rate limit for this endpoint".to_string()));
+        tracing::warn!(
+            "Rate limit check failed unexpectedly after initial check for user {}",
+            user_id
+        );
+        return Err(ApiError::RateLimited(
+            "You have exceeded the rate limit for this endpoint".to_string(),
+        ));
     }
-    
+
     // Rate limit allows proceeding, fetch directly from LLM
-    tracing::info!("Rate limit permits, querying LLM for prompt: {} for user {}", user_prompt, user_id);
-    let saying = fetch_from_llm(&state, &system_prompt_with_language, &user_prompt, preset_id).await?;
-    
+    tracing::info!(
+        "Rate limit permits, querying LLM for prompt: {} for user {}",
+        final_user_prompt,
+        user_id
+    );
+    let mut saying = fetch_from_llm(
+        &state,
+        &system_prompt_with_language,
+        &final_user_prompt,
+        preset_id.clone(),
+    )
+    .await?;
+
+    if matches!(saying.preset_id.as_deref(), Some("orange-pill")) {
+        if let Err(err) =
+            attach_orange_pill_extra(&state, &mut saying, orange_pill_context.as_ref()).await
+        {
+            tracing::warn!("Failed to attach orange-pill extras: {}", err);
+        }
+    }
+
     // Store the saying for this user
     if let Err(e) = state.storage.save_saying(&user_id, saying.clone()).await {
         tracing::error!("Failed to save saying for user {}: {}", user_id, e);
@@ -337,11 +456,11 @@ pub async fn create_saying(
     } else {
         tracing::info!("Successfully saved saying for user: {}", user_id);
     }
-    
+
     // Return the new saying
     let response = SayingResponse::from(saying);
     tracing::info!("Returning new saying with ID: {}", response.id);
-    
+
     Ok((StatusCode::CREATED, Json(response)))
 }
 
@@ -350,21 +469,108 @@ async fn fetch_from_llm(
     state: &Arc<AppState>,
     system_prompt: &str,
     user_prompt: &str,
-    preset_id: Option<String>
+    preset_id: Option<String>,
 ) -> Result<Saying, ApiError> {
-    let saying = state.openrouter.get_saying_with_system(system_prompt, user_prompt).await
+    let saying = state
+        .openrouter
+        .get_saying_with_system(system_prompt, user_prompt)
+        .await
         .map_err(|e| {
             tracing::error!("OpenRouter API error: {}", e);
             ApiError::OpenRouterError(e)
         })?;
-    
+
     // Set preset_id if available
     let saying_with_preset = Saying {
         preset_id,
         ..saying
     };
-    
+
     Ok(saying_with_preset)
+}
+
+fn build_orange_pill_context_lines(data: &BitcoinData) -> Vec<String> {
+    let mut lines = vec![format!("BTCPay height: {}", data.btcpay_height)];
+
+    if let Some(blocks) = data.rpc_blocks {
+        lines.push(format!("RPC blocks: {}", blocks));
+    }
+
+    if let Some(diff) = data.rpc_difficulty {
+        lines.push(format!("RPC difficulty: {:.4}", diff));
+    }
+
+    lines
+}
+
+async fn attach_orange_pill_extra(
+    state: &Arc<AppState>,
+    saying: &mut Saying,
+    bitcoin_data: Option<&BitcoinData>,
+) -> AnyResult<()> {
+    let extra_content = generate_orange_pill_joke(state).await?;
+    let height = if let Some(data) = bitcoin_data {
+        data.btcpay_height
+    } else {
+        state
+            .bitcoin
+            .fetch_data()
+            .await
+            .context("Failed to fetch Bitcoin data for orange-pill extra payload")?
+            .btcpay_height
+    };
+
+    saying.extra = Some(json!({
+        "extra_content": extra_content,
+        "bitcoin_height": height,
+    }));
+
+    Ok(())
+}
+
+async fn generate_orange_pill_joke(state: &Arc<AppState>) -> AnyResult<String> {
+    const PRESET_ID: &str = "orange-pill-joke";
+
+    let preset = state
+        .presets
+        .get_preset_by_id(PRESET_ID)
+        .ok_or_else(|| anyhow!("Preset not found: {}", PRESET_ID))?;
+
+    let prompt = state
+        .presets
+        .random_user_prompt(PRESET_ID)
+        .context("Failed to choose prompt for orange-pill-joke preset")?;
+
+    if let Some(cached) = state
+        .storage
+        .find_cached_saying(&prompt, Some(PRESET_ID))
+        .await
+        .context("Failed to check cache for orange-pill-joke content")?
+    {
+        return Ok(cached.content);
+    }
+
+    let generated = state
+        .openrouter
+        .get_saying_with_system(&preset.system_prompt, &prompt)
+        .await
+        .context("Failed to generate orange-pill-joke content from LLM")?;
+
+    let cached_entry = Saying {
+        preset_id: Some(PRESET_ID.to_string()),
+        source: SayingSource::Cache,
+        ..generated.clone()
+    };
+
+    if let Err(err) = state
+        .storage
+        .save_saying("__preset_cache_orange_pill_joke__", cached_entry)
+        .await
+    {
+        tracing::warn!("Unable to cache orange-pill-joke content: {}", err);
+    }
+
+    Ok(generated.content)
 }
 
 // GET /users/:user_id/status - Get user status
@@ -374,20 +580,22 @@ pub async fn get_user_status(
 ) -> Result<Json<UserStatusResponse>, ApiError> {
     // Check if user is allowed
     is_user_allowed(&user_id)?;
-    
+
     // Check rate limit for the user
     let rate_limit_info = match state.rate_limiter.get_limit_info(&user_id).await {
         Some(info) => info,
         None => {
             // User has no rate limit info yet, return default values
             // Try to get a default preset
-            let selected_preset = state.presets.get_default_preset()
+            let selected_preset = state
+                .presets
+                .get_default_preset()
                 .map(|preset| Some(PresetResponse::from(preset)))
                 .unwrap_or_else(|e| {
                     tracing::error!("Failed to get default preset: {}", e);
                     None
                 });
-            
+
             let response = UserStatusResponse {
                 user_id: user_id.clone(),
                 can_query: true,
@@ -396,19 +604,24 @@ pub async fn get_user_status(
                 last_saying: None,
                 selected_preset,
             };
-            
+
             return Ok(Json(response));
         }
     };
-    
+
     // Get the last saying for this user from storage
-    let last_saying = state.storage.get_last_saying(&user_id).await
+    let last_saying = state
+        .storage
+        .get_last_saying(&user_id)
+        .await
         .ok()
         .and_then(|result| result.map(SayingResponse::from));
-    
+
     // Get or select a preset for the user if they can query
     let selected_preset = if rate_limit_info.remaining_requests > 0 {
-        state.presets.get_or_select_preset(&user_id, rate_limit_info.reset_at)
+        state
+            .presets
+            .get_or_select_preset(&user_id, rate_limit_info.reset_at)
             .map(|preset| Some(PresetResponse::from(preset)))
             .unwrap_or_else(|e| {
                 tracing::error!("Failed to select preset: {}", e);
@@ -417,7 +630,7 @@ pub async fn get_user_status(
     } else {
         None
     };
-    
+
     let response = UserStatusResponse {
         user_id: user_id.clone(),
         can_query: rate_limit_info.remaining_requests > 0,
@@ -426,19 +639,18 @@ pub async fn get_user_status(
         last_saying,
         selected_preset,
     };
-    
+
     Ok(Json(response))
 }
 
 // GET /presets - Get all available presets
-pub async fn get_presets(
-    State(state): State<Arc<AppState>>,
-) -> Json<Vec<PresetResponse>> {
+pub async fn get_presets(State(state): State<Arc<AppState>>) -> Json<Vec<PresetResponse>> {
     let presets = state.presets.get_all_presets();
-    let response = presets.into_iter()
+    let response = presets
+        .into_iter()
         .map(PresetResponse::from)
         .collect::<Vec<_>>();
-    
+
     Json(response)
 }
 
@@ -447,9 +659,11 @@ pub async fn get_preset(
     Path(preset_id): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<PresetResponse>, ApiError> {
-    let preset = state.presets.get_preset_by_id(&preset_id)
+    let preset = state
+        .presets
+        .get_preset_by_id(&preset_id)
         .ok_or_else(|| ApiError::NotFound(format!("No preset with ID: {}", preset_id)))?;
-    
+
     Ok(Json(PresetResponse::from(preset)))
 }
 
@@ -466,9 +680,7 @@ pub async fn get_languages() -> Json<Vec<Language>> {
 }
 
 // GET /languages/:language_id - Get a specific language by ID
-pub async fn get_language(
-    Path(language_id): Path<String>,
-) -> Result<Json<Language>, ApiError> {
+pub async fn get_language(Path(language_id): Path<String>) -> Result<Json<Language>, ApiError> {
     let language = get_language_by_id(&language_id);
     Ok(Json(language))
-} 
+}

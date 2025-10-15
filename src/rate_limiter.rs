@@ -25,7 +25,7 @@ impl RateLimiter {
     pub async fn check(&self, user_id: &str) -> Result<bool> {
         let mut store = self.store.lock().unwrap();
         let now = Utc::now();
-        
+
         if let Some(info) = store.get(user_id) {
             // Check if the rate limit window has expired
             if now > info.reset_at {
@@ -38,7 +38,7 @@ impl RateLimiter {
                 store.insert(user_id.to_string(), new_info);
                 return Ok(true);
             }
-            
+
             // Check if there are remaining requests
             if info.remaining_requests > 0 {
                 // Update remaining requests
@@ -50,11 +50,11 @@ impl RateLimiter {
                 store.insert(user_id.to_string(), new_info);
                 return Ok(true);
             }
-            
+
             // Rate limit exceeded
             return Ok(false);
         }
-        
+
         // First request for this user
         let new_info = RateLimitInfo {
             user_id: user_id.to_string(),
@@ -62,25 +62,25 @@ impl RateLimiter {
             reset_at: now + Duration::seconds(self.config.window_seconds as i64),
         };
         store.insert(user_id.to_string(), new_info);
-        
+
         Ok(true)
     }
-    
+
     pub async fn reset(&self, user_id: &str) -> Result<()> {
         let mut store = self.store.lock().unwrap();
         let now = Utc::now();
-        
+
         // Set up the user with a fresh rate limit
         let new_info = RateLimitInfo {
             user_id: user_id.to_string(),
-            remaining_requests: self.config.max_requests,  // Full quota
+            remaining_requests: self.config.max_requests, // Full quota
             reset_at: now + Duration::seconds(self.config.window_seconds as i64),
         };
-        
+
         store.insert(user_id.to_string(), new_info);
         Ok(())
     }
-    
+
     pub async fn get_limit_info(&self, user_id: &str) -> Option<RateLimitInfo> {
         let store = self.store.lock().unwrap();
         store.get(user_id).cloned()

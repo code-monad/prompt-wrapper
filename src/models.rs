@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -10,6 +11,8 @@ pub struct Saying {
     pub created_at: DateTime<Utc>,
     pub source: SayingSource,
     pub preset_id: Option<String>, // Track which preset was used, if any
+    #[serde(default)]
+    pub extra: Option<Value>,
 }
 
 // Global cache key for identifying reusable sayings across users
@@ -36,7 +39,7 @@ impl CacheKey {
     pub fn new(preset_id: Option<String>, prompt: String) -> Self {
         Self { preset_id, prompt }
     }
-    
+
     // Create from a saying
     pub fn from_saying(saying: &Saying) -> Self {
         Self {

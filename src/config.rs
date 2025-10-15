@@ -8,6 +8,7 @@ pub struct Config {
     pub rate_limit: RateLimitConfig,
     pub storage: StorageConfig,
     pub presets: PresetsConfig,
+    pub bitcoin: BitcoinConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,6 +42,12 @@ pub struct PresetsConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BitcoinConfig {
+    pub btcpay_api_url: String,
+    pub btcpay_api_key: String,
+    pub rpc_url: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StorageType {
     #[serde(rename = "sqlite")]
     SQLite,
@@ -71,8 +78,10 @@ impl Config {
             },
             openrouter: OpenRouterConfig {
                 api_key: env::var("OPENROUTER_API_KEY").expect("OPENROUTER_API_KEY must be set"),
-                model: env::var("OPENROUTER_MODEL").unwrap_or_else(|_| "mistralai/mistral-7b-instruct".to_string()),
-                base_url: env::var("OPENROUTER_BASE_URL").unwrap_or_else(|_| "https://openrouter.ai/api/v1".to_string()),
+                model: env::var("OPENROUTER_MODEL")
+                    .unwrap_or_else(|_| "mistralai/mistral-7b-instruct".to_string()),
+                base_url: env::var("OPENROUTER_BASE_URL")
+                    .unwrap_or_else(|_| "https://openrouter.ai/api/v1".to_string()),
             },
             rate_limit: RateLimitConfig {
                 max_requests: env::var("RATE_LIMIT_MAX_REQUESTS")
@@ -85,16 +94,29 @@ impl Config {
                     .unwrap_or(3600),
             },
             storage: StorageConfig {
-                type_: match env::var("STORAGE_TYPE").unwrap_or_else(|_| "memory".to_string()).as_str() {
+                type_: match env::var("STORAGE_TYPE")
+                    .unwrap_or_else(|_| "memory".to_string())
+                    .as_str()
+                {
                     "sqlite" => StorageType::SQLite,
                     "redis" => StorageType::Redis,
                     "sled" => StorageType::Sled,
                     _ => StorageType::Memory,
                 },
-                connection_string: env::var("STORAGE_CONNECTION_STRING").unwrap_or_else(|_| "memory".to_string()),
+                connection_string: env::var("STORAGE_CONNECTION_STRING")
+                    .unwrap_or_else(|_| "memory".to_string()),
             },
             presets: PresetsConfig {
-                file_path: env::var("PRESETS_FILE_PATH").unwrap_or_else(|_| "./presets.yaml".to_string()),
+                file_path: env::var("PRESETS_FILE_PATH")
+                    .unwrap_or_else(|_| "./presets.yaml".to_string()),
+            },
+            bitcoin: BitcoinConfig {
+                btcpay_api_url: env::var("BTCPAY_API_URL")
+                    .unwrap_or_else(|_| "https://btcpay.nvap.link/api/v1/server/info".to_string()),
+                btcpay_api_key: env::var("BTCPAY_API_KEY")
+                    .unwrap_or_else(|_| "ebf4a2293b1a1ed3ab1b28706f0a937cc21fbbac".to_string()),
+                rpc_url: env::var("BITCOIN_RPC_URL")
+                    .unwrap_or_else(|_| "https://bitcoin-rpc.publicnode.com".to_string()),
             },
         }
     }
