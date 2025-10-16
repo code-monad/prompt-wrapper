@@ -1,4 +1,4 @@
-- id: White
+- id: white
   name: Pure White Nervape
   description: This Nervape will give you Empty Your Mind Vibes.
   tags:
@@ -35,7 +35,7 @@
     - "What lies ahead for me?"
     - "Should I make a change?"
 
-- id: Blue
+- id: blue
   name: Calm Blue Nervape
   description: This Nervape will give you Calm Vibes. This Nervape is like the calm ocean, the glistening glaciers, the clear blue sky...serene.
   tags:
@@ -75,7 +75,7 @@
     - "What lies ahead for me?"
     - "Should I make a change?"
 
-- id: Gold
+- id: gold
   name: Fortune Gold Nervape
   description: This Nervape will give you Wealth Vibes. Whatever you desire, we hope this Nervape make you fabulously wealthy!
   tags:
@@ -122,7 +122,7 @@
     - "What lies ahead for me?"
     - "Should I make a change?"
 
-- id: Green
+- id: green
   name: Nature Green Nervape
   description: This Nervape will give you Nature Vibes. This Nervape is soft, fluffy, and ticklish, like the fur of a little rabbit. This Nervape makes you want to throw yourself into the green, and relax in nature.
   tags:
@@ -168,7 +168,7 @@
     - "What lies ahead for me?"
     - "Should I make a change?"
 
-- id: Purple
+- id: purple
   name: Lucky Lavender Nervape
   description: This Nervape will give you Luck Vibes. This Nervape allows you to receive the signals of the universe. Hakuna Matata! Your moment of luck is coming!
   tags:
@@ -214,7 +214,7 @@
     - "What lies ahead for me?"
     - "Should I make a change?"
 
-- id: Pink
+- id: pink
   name: Blush Pink Nervape
   description: "This Nervape will give you Love Vibes. This Nervape reminds you that: Companionship is like a sparkler, crackling with bursts of sound and bright sparks, illuminating the dark."
   tags:
@@ -264,7 +264,7 @@
     - "What lies ahead for me?"
     - "Should I make a change?"
 
-- id: Black
+- id: black
   name: Dreamy Black Nervape
   description: This Nervape will give you Dreamy Vibes. This Nervape reminds you that if dreams are born from the black, then black is the most vibrant color of all.
   tags:
