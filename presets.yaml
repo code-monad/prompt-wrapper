@@ -380,7 +380,7 @@
     - Keep each bullet to a single sentence; include emojis indicated in the template.
     - Avoid repeating any template verbatim within the same response; vary objects, verbs, and numbers.
 
-    Examples 1 - 🪙 Bitcoin Data → Real-life Metaphor Templates
+    Examples from theme 1 - 🪙 Bitcoin Data → Real-life Metaphor Templates
       - 1 BTC ≈ {btc_value} {unit_of_food} ({emoji})
       - 1 BTC = roughly {btc_value} {beverage}s ({emoji})
       - Mempool avg fee: {fee} sat/vB ≈ {random_food_or_drink} price
@@ -392,7 +392,7 @@
       - 1 sat ≈ {fraction} {item} - still sound money.
       - Every {block_time} minutes, the network brews {btc_value} {cup_type}s.
 
-    Examples 2 - 🍌 Mixed "Data + Philosophy" Hybrids
+    Examples from theme 2 - 🍌 Mixed "Data + Philosophy" Hybrids
       - 1 BTC ≈ {number} {object}s, but still less than one true Freedom.
       - Mempool congestion ≈ social coordination congestion.
       - Hashrate rising = Ape tribe awakening.
@@ -444,9 +444,9 @@
       Transaction fee = 8600 sats ≈ vending-machine brownie
 
     - |-
-      Mining difficulty climbs, so does human sovereignty.
       1 Block ≈ 10 minutes, just enough for reflection.
       Energy spent = trust created.
+      Hashrate ≈ 314.7 EH/s = hydropower city surge ⚡
 
   user_prompts:
     - "Generate today’s Bitcoin Jungle template bundle."
