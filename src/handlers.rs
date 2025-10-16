@@ -507,11 +507,18 @@ async fn fetch_from_llm(
 }
 
 fn build_previous_output_context(sayings: &[Saying]) -> Option<String> {
+    build_history_context(sayings, |source| matches!(source, SayingSource::LLM))
+}
+
+fn build_history_context<F>(sayings: &[Saying], include_source: F) -> Option<String>
+where
+    F: Fn(&SayingSource) -> bool,
+{
     let mut seen = HashSet::new();
     let mut lines = Vec::new();
 
     for saying in sayings {
-        if !matches!(saying.source, SayingSource::LLM) {
+        if !include_source(&saying.source) {
             continue;
         }
 
@@ -579,6 +586,7 @@ async fn attach_orange_pill_extra(
 
 async fn generate_orange_pill_joke(state: &Arc<AppState>) -> AnyResult<String> {
     const PRESET_ID: &str = "orange-pill-joke";
+    const CACHE_USER_ID: &str = "__preset_cache_orange_pill_joke__";
 
     let preset = state
         .presets
@@ -589,6 +597,17 @@ async fn generate_orange_pill_joke(state: &Arc<AppState>) -> AnyResult<String> {
         .presets
         .random_user_prompt(PRESET_ID)
         .context("Failed to choose prompt for orange-pill-joke preset")?;
+
+    let mut system_prompt = preset.system_prompt.clone();
+
+    if let Ok(history) = state.storage.get_sayings(CACHE_USER_ID, 5).await {
+        if let Some(previous_lines) = build_history_context(&history, |_| true) {
+            system_prompt = format!(
+                "{}\n\nPreviously delivered template lines:\n{}\nCraft three fresh lines that differ from every example above.",
+                system_prompt, previous_lines
+            );
+        }
+    }
 
     if let Some(cached) = state
         .storage
@@ -601,7 +620,7 @@ async fn generate_orange_pill_joke(state: &Arc<AppState>) -> AnyResult<String> {
 
     let generated = state
         .openrouter
-        .get_saying_with_system(&preset.system_prompt, &prompt)
+        .get_saying_with_system(&system_prompt, &prompt)
         .await
         .context("Failed to generate orange-pill-joke content from LLM")?;
 
@@ -611,11 +630,7 @@ async fn generate_orange_pill_joke(state: &Arc<AppState>) -> AnyResult<String> {
         ..generated.clone()
     };
 
-    if let Err(err) = state
-        .storage
-        .save_saying("__preset_cache_orange_pill_joke__", cached_entry)
-        .await
-    {
+    if let Err(err) = state.storage.save_saying(CACHE_USER_ID, cached_entry).await {
         tracing::warn!("Unable to cache orange-pill-joke content: {}", err);
     }
 

@@ -379,6 +379,7 @@
     - Replace every token (e.g. {btc_value}, {unit_of_food}) with fresh values that respect the ranges.
     - Keep each bullet to a single sentence; include emojis indicated in the template.
     - Avoid repeating any template verbatim within the same response; vary objects, verbs, and numbers.
+    - Treat both example sections as structural guides only; always swap in new vocabulary.
 
     Examples from theme 1 - 🪙 Bitcoin Data → Real-life Metaphor Templates
       - 1 BTC ≈ {btc_value} {unit_of_food} ({emoji})
@@ -392,17 +393,17 @@
       - 1 sat ≈ {fraction} {item} - still sound money.
       - Every {block_time} minutes, the network brews {btc_value} {cup_type}s.
 
-    Examples from theme 2 - 🍌 Mixed "Data + Philosophy" Hybrids
-      - 1 BTC ≈ {number} {object}s, but still less than one true Freedom.
-      - Mempool congestion ≈ social coordination congestion.
-      - Hashrate rising = Ape tribe awakening.
-      - Fee market = survival of the most patient Apes.
-      - Mining difficulty climbs, so does human sovereignty.
-      - 1 Block ≈ 10 minutes, just enough for reflection.
-      - Each confirmation = a heartbeat of the collective.
-      - Energy spent = trust created.
-      - Apes validate, State hesitates.
-      - Hashrate high, trust low, freedom high.
+    Examples from theme 2 - 🍌 Mixed "Data + Philosophy" Hybrids (replace tokens; do not reuse these sample words verbatim)
+      - 1 BTC ≈ {number} {object}s, but still less than one true {value_label}.
+      - Mempool congestion ≈ {social_analogy}.
+      - Hashrate rising = {tribe_descriptor} awakening.
+      - Fee market = survival of the most {adjective_trait} Apes.
+      - Mining difficulty climbs, so does {freedom_quality}.
+      - 1 Block ≈ 10 minutes, just enough for {reflection_action}.
+      - Each confirmation = a heartbeat of the {collective_noun}.
+      - Energy spent = {trust_equivalent}.
+      - Apes validate, {counterparty} hesitates.
+      - Hashrate high, trust low, {freedom_balance}.
 
     Token ranges:
     - {btc_value}: integer 100–500000
@@ -426,6 +427,16 @@
     - {item}: coffee / pizza / cola / apple / taco / beer / ice cream / ramen / banana
     - {block_time}: integer 1–100
     - {cup_type}: mugs / thermoses / gourds / espresso shots
+    - {value_label}: Freedom / Liberation / Sovereignty / Autonomy / Independence
+    - {social_analogy}: FOMO queue / downtown rush hour / consensus traffic / DAO meeting backlog / network jam
+    - {tribe_descriptor}: ape cohort / jungle tribe / node circle / sovereign squad / miner caravan
+    - {adjective_trait}: patient / curious / resilient / fearless / meticulous
+    - {freedom_quality}: self-sovereignty / permissionless grace / open source resolve / jungle liberty / unbound agency
+    - {reflection_action}: meditative breathwork / trading retrospection / node sync / quiet plotting / jungle journaling
+    - {collective_noun}: jungle chorus / sovereign mesh / ape collective / freedom drumbeat / mempool choir
+    - {trust_equivalent}: handshake of code / ledger glow / timechain heartbeat / verified bond / cryptographic oath
+    - {counterparty}: fiat gatekeepers / legacy banks / paper empires / slow empires / old-world auditors
+    - {freedom_balance}: freedom surging / sovereignty lifted / decentralization roaring / ape morale soaring / independence rising
 
   example_answers:
     - |-
