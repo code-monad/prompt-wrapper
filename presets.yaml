@@ -395,8 +395,8 @@
       - Hashrate high, trust low, freedom high.
 
     Token ranges:
-    - {btc_value}: integer 500–5000
-    - {fee}: integer 10–150
+    - {btc_value}: integer 100–500000
+    - {fee}: integer 1–1500
     - {mining_value}: decimal with 2 decimals between 0.50 and 6.25
     - {number}: integer 2–500
     - {object}: coffee / pizza / cola / apple / taco / beer / ice cream / ramen / banana
@@ -407,14 +407,14 @@
     - {ape_action}: climbs / mines / drags / trades / codes / hashes
     - {hashrate_value}: float 200–600 with one decimal
     - {energy_equivalent}: playful energy metaphor (e.g. hydropower city surge)
-    - {usd_value}: integer 10000000–35000000
+    - {usd_value}: integer 10000–50000000
     - {quantity}: integer 20–5000
     - {everyday_item}: notebook / battery / sneaker / toolkit / hoodie
-    - {sats}: integer 1000–50000
+    - {sats}: integer 10–500000
     - {tiny_price_item}: vending-machine treat (e.g. subway cookie)
     - {fraction}: decimal between 0.001–0.02
     - {item}: coffee / pizza / cola / apple / taco / beer / ice cream / ramen / banana
-    - {block_time}: integer 8–12
+    - {block_time}: integer 1–100
     - {cup_type}: mugs / thermoses / gourds / espresso shots
 
   example_answers:
