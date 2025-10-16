@@ -7,6 +7,7 @@ use chrono::{DateTime, Utc};
 use rand::{self, seq::SliceRandom};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -401,6 +402,22 @@ pub async fn create_saying(
         system_prompt
     };
 
+    match state.storage.get_sayings(&user_id, 5).await {
+        Ok(history) => {
+            if let Some(previous_outputs) = build_previous_output_context(&history) {
+                final_user_prompt = format!(
+                    "{final_user_prompt}\n\nPrevious outputs for this user:\n{}\nRespond with a fresh idea that avoids repeating those lines.",
+                    previous_outputs
+                );
+            }
+        }
+        Err(err) => tracing::warn!(
+            "Failed to fetch previous sayings for user {}: {}",
+            user_id,
+            err
+        ),
+    }
+
     tracing::info!(
         "Processing request for user '{}' with prompt: {} and preset: {:?} in language: {}",
         user_id,
@@ -487,6 +504,38 @@ async fn fetch_from_llm(
     };
 
     Ok(saying_with_preset)
+}
+
+fn build_previous_output_context(sayings: &[Saying]) -> Option<String> {
+    let mut seen = HashSet::new();
+    let mut lines = Vec::new();
+
+    for saying in sayings {
+        if !matches!(saying.source, SayingSource::LLM) {
+            continue;
+        }
+
+        let trimmed = saying.content.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let normalized = trimmed.to_ascii_lowercase();
+        if !seen.insert(normalized) {
+            continue;
+        }
+
+        lines.push(format!("- {}", trimmed));
+        if lines.len() == 3 {
+            break;
+        }
+    }
+
+    if lines.is_empty() {
+        None
+    } else {
+        Some(lines.join("\n"))
+    }
 }
 
 fn build_orange_pill_context_lines(data: &BitcoinData) -> Vec<String> {
