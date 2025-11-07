@@ -295,6 +295,16 @@ pub async fn create_saying(
     // Access check (moved after initial rate limit check)
     is_user_allowed(&user_id)?;
 
+    if let Some(cached_response) =
+        serve_cached_response_within_refresh_window(&state, &user_id).await
+    {
+        tracing::info!(
+            "Serving cached response within refresh window for user {}",
+            user_id
+        );
+        return Ok((StatusCode::OK, Json(cached_response)));
+    }
+
     // Resolve prompt selection regardless of rate limiting
     let (system_prompt, user_prompt, preset_id) =
         match (payload.prompt.clone(), payload.preset_id.clone()) {
@@ -543,6 +553,49 @@ where
     } else {
         Some(lines.join("\n"))
     }
+}
+
+async fn serve_cached_response_within_refresh_window(
+    state: &Arc<AppState>,
+    user_id: &str,
+) -> Option<SayingResponse> {
+    let cache_config = &state.config.response_cache;
+    if cache_config.refresh_seconds <= 0 {
+        return None;
+    }
+
+    if cache_config
+        .excluded_user_ids
+        .iter()
+        .any(|blocked| blocked == user_id)
+    {
+        return None;
+    }
+
+    match state.storage.get_last_saying(user_id).await {
+        Ok(Some(last_saying)) => {
+            let age_seconds = Utc::now()
+                .signed_duration_since(last_saying.created_at)
+                .num_seconds();
+
+            if age_seconds >= 0 && age_seconds <= cache_config.refresh_seconds {
+                return Some(SayingResponse::from(Saying {
+                    source: SayingSource::Cache,
+                    ..last_saying
+                }));
+            }
+        }
+        Ok(None) => {}
+        Err(err) => {
+            tracing::warn!(
+                "Failed to load last saying for user {} while checking refresh window: {}",
+                user_id,
+                err
+            );
+        }
+    }
+
+    None
 }
 
 fn build_orange_pill_context_lines(data: &BitcoinData) -> Vec<String> {

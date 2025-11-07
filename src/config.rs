@@ -6,6 +6,7 @@ pub struct Config {
     pub server: ServerConfig,
     pub openrouter: OpenRouterConfig,
     pub rate_limit: RateLimitConfig,
+    pub response_cache: ResponseCacheConfig,
     pub storage: StorageConfig,
     pub presets: PresetsConfig,
     pub bitcoin: BitcoinConfig,
@@ -34,6 +35,12 @@ pub struct RateLimitConfig {
 pub struct StorageConfig {
     pub type_: StorageType,
     pub connection_string: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResponseCacheConfig {
+    pub refresh_seconds: i64,
+    pub excluded_user_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,6 +75,25 @@ pub const TEST_USER_ID: &str = "invalid_test_user";
 
 impl Config {
     pub fn from_env() -> Self {
+        let refresh_seconds = env::var("USER_RESPONSE_REFRESH_SECONDS")
+            .ok()
+            .and_then(|value| value.parse::<i64>().ok())
+            .unwrap_or(0)
+            .max(0);
+
+        let excluded_user_ids = env::var("USER_RESPONSE_REFRESH_EXCLUDE_LIST")
+            .unwrap_or_default()
+            .split(',')
+            .filter_map(|raw| {
+                let trimmed = raw.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_string())
+                }
+            })
+            .collect::<Vec<_>>();
+
         Config {
             server: ServerConfig {
                 host: env::var("SERVER_HOST").unwrap_or_else(|_| "127.0.0.1".to_string()),
@@ -92,6 +118,10 @@ impl Config {
                     .unwrap_or_else(|_| "3600".to_string())
                     .parse()
                     .unwrap_or(3600),
+            },
+            response_cache: ResponseCacheConfig {
+                refresh_seconds,
+                excluded_user_ids,
             },
             storage: StorageConfig {
                 type_: match env::var("STORAGE_TYPE")

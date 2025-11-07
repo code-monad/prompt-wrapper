@@ -226,6 +226,8 @@ All configuration is done through environment variables or the `.env` file:
 - `OPENROUTER_MODEL`: The model to use (default: mistralai/mistral-7b-instruct)
 - `RATE_LIMIT_MAX_REQUESTS`: Maximum number of requests per window
 - `RATE_LIMIT_WINDOW_SECONDS`: Window size in seconds for rate limiting
+- `USER_RESPONSE_REFRESH_SECONDS`: Number of seconds to reuse a user's last response before querying OpenRouter again (set to 0 to disable)
+- `USER_RESPONSE_REFRESH_EXCLUDE_LIST`: Comma-separated list of user IDs that should always bypass the refresh window logic
 - `STORAGE_TYPE`: Type of storage to use (memory, sled, redis, sqlite)
 - `STORAGE_CONNECTION_STRING`: Connection string for the storage
 - `PRESETS_FILE_PATH`: Path to the presets YAML file
