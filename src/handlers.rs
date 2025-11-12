@@ -412,6 +412,7 @@ pub async fn create_saying(
         system_prompt
     };
 
+    let mut recent_history: Vec<Saying> = Vec::new();
     match state.storage.get_sayings(&user_id, 5).await {
         Ok(history) => {
             if let Some(previous_outputs) = build_previous_output_context(&history) {
@@ -420,6 +421,7 @@ pub async fn create_saying(
                     previous_outputs
                 );
             }
+            recent_history = history;
         }
         Err(err) => tracing::warn!(
             "Failed to fetch previous sayings for user {}: {}",
@@ -460,11 +462,15 @@ pub async fn create_saying(
         final_user_prompt,
         user_id
     );
-    let mut saying = fetch_from_llm(
+    let previous_non_cache = find_latest_non_cache_saying(&recent_history);
+
+    let mut saying = generate_unique_saying(
         &state,
+        &user_id,
         &system_prompt_with_language,
         &final_user_prompt,
         preset_id.clone(),
+        previous_non_cache.as_ref(),
     )
     .await?;
 
@@ -516,8 +522,91 @@ async fn fetch_from_llm(
     Ok(saying_with_preset)
 }
 
+async fn generate_unique_saying(
+    state: &Arc<AppState>,
+    user_id: &str,
+    base_system_prompt: &str,
+    base_user_prompt: &str,
+    preset_id: Option<String>,
+    previous_non_cache: Option<&Saying>,
+) -> Result<Saying, ApiError> {
+    const MAX_ATTEMPTS: usize = 3;
+    let mut attempt = 0usize;
+    let mut last_candidate: Option<Saying> = None;
+    let mut avoidance_reference: Option<String> = previous_non_cache.map(|s| s.content.clone());
+
+    loop {
+        let (system_prompt, user_prompt) = if attempt == 0 {
+            (base_system_prompt.to_string(), base_user_prompt.to_string())
+        } else {
+            let reference = avoidance_reference
+                .as_deref()
+                .unwrap_or("No previous response available");
+            (
+                format!(
+                    "{}\n\nAvoid repeating or paraphrasing this previous response:\n\"{}\"",
+                    base_system_prompt, reference
+                ),
+                format!(
+                    "{}\n\nPrevious response to avoid:\n\"{}\"\nProvide a distinctly different answer.",
+                    base_user_prompt, reference
+                ),
+            )
+        };
+
+        let candidate =
+            fetch_from_llm(state, &system_prompt, &user_prompt, preset_id.clone()).await?;
+
+        let matches_previous_non_cache = previous_non_cache
+            .map(|prev| contents_match(&candidate.content, &prev.content))
+            .unwrap_or(false);
+        let matches_last_candidate = last_candidate
+            .as_ref()
+            .map(|prev| contents_match(&candidate.content, &prev.content))
+            .unwrap_or(false);
+
+        if !matches_previous_non_cache && !matches_last_candidate {
+            return Ok(candidate);
+        }
+
+        tracing::warn!(
+            "Duplicate non-cache response detected for user {} (attempt {}). Retrying.",
+            user_id,
+            attempt + 1
+        );
+
+        attempt += 1;
+        if matches_previous_non_cache {
+            avoidance_reference = previous_non_cache.map(|prev| prev.content.clone());
+        } else {
+            avoidance_reference = Some(candidate.content.clone());
+        }
+        last_candidate = Some(candidate);
+
+        if attempt >= MAX_ATTEMPTS {
+            tracing::warn!(
+                "Exceeded max attempts ({}) to generate unique response for user {}. Returning last result.",
+                MAX_ATTEMPTS,
+                user_id
+            );
+            return Ok(last_candidate.expect("candidate must exist"));
+        }
+    }
+}
+
 fn build_previous_output_context(sayings: &[Saying]) -> Option<String> {
     build_history_context(sayings, |source| matches!(source, SayingSource::LLM))
+}
+
+fn find_latest_non_cache_saying(sayings: &[Saying]) -> Option<Saying> {
+    sayings
+        .iter()
+        .find(|s| !matches!(s.source, SayingSource::Cache))
+        .cloned()
+}
+
+fn contents_match(a: &str, b: &str) -> bool {
+    a.trim().eq_ignore_ascii_case(b.trim())
 }
 
 fn build_history_context<F>(sayings: &[Saying], include_source: F) -> Option<String>
